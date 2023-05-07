@@ -1,0 +1,782 @@
+---
+title: "Appendix"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+Matches = read.csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-11-29/wcmatches.csv")
+matches_rename = Matches
+
+for(i in seq(1, length(matches_rename$stage))){
+  if(matches_rename[i,]$stage %in% c("Group 1", "Group 2", "Group 3",
+                                     "Group 4", "Group 5","Group 6", 
+                                     "Group D ", " Group A",
+                                     "Group A", "Group B", "Group C",
+                                     "Group D", "Group E", "Group F",
+                                     "Group G", "Group H", "Group I")){
+    matches_rename[i,]$stage = "Group"
+  }
+  
+  if(matches_rename[i,]$stage %in% c("Round of 16", "Quarterfinals",
+                                     "Semifinals", "Third place",
+                                     "Final", "Final Round")){
+    matches_rename[i,]$stage = "Knockout"
+  }
+}
+```
+
+## Appendix 1
+
+**1.a**
+
+```{r message=FALSE}
+World_cups = read.csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-11-29/worldcups.csv")
+Matches = read.csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-11-29/wcmatches.csv")
+
+library(tidyverse)
+
+## Setting Up Overall Statistics ##
+# Get Total Goals #
+
+Home_Goals = Matches %>% group_by(home_team) %>%
+  group_by(year, .add = TRUE) %>% 
+  summarise(home_goals = sum(home_score), H_goals_against = sum(away_score),
+            H_total_matches = n()) %>% 
+  rename(country = home_team)
+
+Away_Goals = Matches %>% group_by(away_team) %>% 
+  group_by(year, .add = TRUE) %>% 
+  summarise(away_goals = sum(away_score), A_goals_against = sum(home_score),
+            A_total_matches = n()) %>% 
+  rename(country = away_team)
+
+Goals = Home_Goals %>% 
+  full_join(Away_Goals, by = c("country", "year"))
+```
+
+**1.b**
+
+```{r message=FALSE}
+# Remove NA values from Goals
+for(i in seq(1:length(Goals$country)))
+  {
+  for(j in seq(1:length(Goals[i,])))
+  {
+    if(is.na(Goals[i,j]))
+    {
+      Goals[i,j] = 0
+    }
+  }
+}
+```
+
+**1.c**
+
+```{r message=FALSE}
+# Summarizing the stats
+Goals_by_year = Goals %>% 
+  mutate(total_goals = home_goals + away_goals,
+         total_goals_against = H_goals_against + A_goals_against,
+         diff = total_goals - total_goals_against,
+         total_matches = H_total_matches + A_total_matches,
+         goals_per_game = total_goals/total_matches,
+         goals_against_per_game = total_goals_against/total_matches)
+```
+
+**1.d**
+
+```{r message=FALSE}
+# Calculation of records by year (wins, losses, and draws)
+wins = matches_rename %>% group_by(winning_team) %>% 
+  group_by(year, .add = TRUE) %>% 
+  filter(outcome != "D") %>% 
+  summarize(total_wins = n()) %>% 
+  rename(country = winning_team)
+
+losses = matches_rename %>% group_by(losing_team) %>%
+  group_by(year, .add = TRUE) %>% 
+  filter(outcome != "D") %>% 
+  summarize(total_losses = n()) %>% 
+  rename(country = losing_team)
+
+draws_home = matches_rename %>% group_by(home_team) %>% 
+  group_by(year, .add = TRUE) %>% 
+  filter(outcome == "D") %>% 
+  summarise(draws_home = n()) %>% 
+  rename(country = home_team)
+
+draws_away = matches_rename %>% group_by(away_team) %>% 
+  group_by(year, .add = TRUE) %>% 
+  filter(outcome == "D") %>% 
+  summarise(draws_away = n()) %>% 
+  rename(country = away_team)
+```
+
+**1.e**
+
+```{r message=FALSE}
+Records = wins %>% 
+  full_join(losses, by = c("country","year"))
+
+Draws = full_join(draws_home, draws_away, by = c("country","year"))
+```
+
+**1.f**
+
+```{r message=FALSE}
+# Remove NA from Draws
+for(i in seq(1:length(Draws$country)))
+{
+  if(is.na(Draws[i,]$draws_home))
+  {
+    Draws[i,]$draws_home = 0
+  }
+  if(is.na(Draws[i,]$draws_away))
+  {
+    Draws[i,]$draws_away = 0
+  }
+}
+
+Draws = Draws %>% 
+  mutate(total_draws = draws_home + draws_away)
+```
+
+**1.g**
+
+```{r message=FALSE}
+# Combines into one records data set
+Records = wins %>% 
+  full_join(losses, by = c("country", "year")) %>% 
+  full_join(Draws, by = c("country", "year")) %>% 
+  select(-c(draws_home, draws_away)) %>% 
+  arrange(year) %>% arrange(country)
+
+# remove NA from records data set
+for(i in seq(1:length(Records$country)))
+{
+  for(j in seq(1:length(Records[i,])))
+  {
+    if(is.na(Records[i,j]))
+    {
+      Records[i,j] = 0
+    }
+  }
+}
+```
+
+**1.h**
+
+```{r message=FALSE}
+# combine records and goals into one dataset and calculate win percentage
+Countries_WC_Year = Records %>% 
+  full_join(Goals_by_year, by = c("country", "year")) %>% 
+  arrange(year) %>% arrange(country) %>% 
+  mutate(win_perc = (total_wins+total_draws*0.5)/total_matches)
+```
+
+**1.i**
+
+```{r message=FALSE}
+# summarize stats by country
+Countries_WC = Countries_WC_Year %>% 
+  group_by(country) %>% 
+  summarize(total_wins = sum(total_wins),
+            total_losses = sum(total_losses),
+            total_draws = sum(total_draws),
+            total_GP = sum(total_matches),
+            win_perc = (total_wins + total_draws*0.5)/total_GP,
+            total_goals = sum(total_goals),
+            total_goals_against = sum(total_goals_against),
+            diff = sum(diff), goals_per_game = total_goals/total_GP,
+            goals_against_per_game = total_goals_against/total_GP)
+```
+
+**1.j**
+
+```{r message=FALSE}
+# Using Linear Regression to make model with train and test data
+set.seed(21)
+row.number = sample(1:nrow(Countries_WC), 2/3*nrow(Countries_WC))
+
+Countries_WC_model = Countries_WC %>%
+  dplyr::select(c(win_perc, goals_per_game, goals_against_per_game))
+
+train_fifa = Countries_WC_model[row.number, ]
+test_fifa = Countries_WC_model[-row.number, ]
+
+actual_vals_fifa = test_fifa$win_perc
+fit = lm(win_perc ~ ., data = train_fifa)
+pred_vals_fifa = predict(fit, newdata = test_fifa)
+#RMSE
+sqrt(mean((actual_vals_fifa - pred_vals_fifa)^2))
+
+summary(fit)
+```
+
+**1.k**
+
+```{r message=FALSE}
+# Looking at normality via distribution histograms
+Countries_WC_Year %>% ggplot(aes(x = goals_per_game)) +
+  geom_histogram()
+
+Countries_WC_Year %>% ggplot(aes(x = goals_against_per_game)) + 
+  geom_histogram()
+```
+
+**1.l**
+
+```{r message=FALSE}
+## Normalization of Goals per World Cup
+norm_goals = Countries_WC_Year %>% 
+  group_by(year) %>% summarize(mean_gpg = mean(goals_per_game),
+                               sd_gpg = sd(goals_per_game),
+                               mean_gapg = mean(goals_against_per_game),
+                               sd_gapg = sd(goals_against_per_game))
+
+# Adding normalized goals per year back into original data set
+Countries_WC_Year = Countries_WC_Year %>% 
+  left_join(norm_goals, by = "year")
+
+# Normalizing using z-score method to get a new set of scores
+Norm_scores_fifa = Countries_WC_Year %>% 
+  dplyr::select(c(country, year, goals_per_game, goals_against_per_game,
+                  mean_gpg, sd_gpg, mean_gapg, sd_gapg)) %>% 
+  mutate(norm_goals_per_game = (goals_per_game - mean_gpg)/sd_gpg,
+         norm_goals_against_per_game = 
+           (goals_against_per_game - mean_gapg)/sd_gapg,
+         score = norm_goals_per_game - norm_goals_against_per_game) %>% 
+  dplyr::select(c(country, year, score)) %>% arrange(desc(score))
+
+head(Norm_scores_fifa, 10)
+```
+
+**1.m**
+
+```{r message=FALSE}
+# Looking at countries finishing position to get some measure of accuracy
+# make a data frame
+country <- c()
+year <- c()
+position <- c()
+
+finish_position <- data.frame(country, year, position)
+
+# loop through the World Cups data set, moving the information for 
+# the top 4 finishing teams from that year into the data frame created above
+k = 1
+for(i in 1:nrow(World_cups)){
+  for(j in 3:6){
+    finish_position[k,1] = World_cups[i,j]
+    finish_position[k,2] = World_cups[i,1]
+    finish_position[k,3] = colnames(World_cups)[j]
+    k = k + 1 
+  }
+}
+
+# Renaming the columns and then joining the results to the scores dataset for
+# comparison. 
+finish_position = finish_position %>% rename(country = V1, year = V2, position = V3)
+Norm_scores_fifa_winners = Norm_scores_fifa %>% 
+  left_join(finish_position, by = c("country", "year"))
+
+head(finish_position)
+```
+
+**1.n**
+
+```{r message=FALSE}
+# looking at hit rate on winning teams in the top 10
+count = 0
+for(i in 1:10)
+{
+  if(!is.na(Norm_scores_fifa_winners[i,]$position)){
+    if(Norm_scores_fifa_winners[i,]$position == "winner")
+    {
+      count = count + 1
+    }
+  }
+}
+
+(count/10)
+
+# looking at hit rate on teams in the top 4 within the top 10
+count = 0
+for(i in 1:10)
+{
+  if(is.na(Norm_scores_fifa_winners[i,4]))
+  {
+    count = count + 1
+  }
+}
+
+1-(count/10)
+
+# now within the top 25
+count = 0
+for(i in 1:25)
+{
+  if(is.na(Norm_scores_fifa_winners[i,4]))
+  {
+    count = count + 1
+  }
+}
+
+1-(count/25)
+```
+
+**1.o**
+
+```{r message=FALSE}
+# Calculate Correlations (using totals (ie Countries_WC))
+cor(Countries_WC$total_goals, Countries_WC$total_wins, method = "spearman")
+cor(Countries_WC$total_goals_against, Countries_WC$total_wins, method = "spearman")
+cor(Countries_WC$total_goals, Countries_WC$total_losses, method = "spearman")
+cor(Countries_WC$total_goals_against, Countries_WC$total_losses, method = "spearman")
+
+cor(Countries_WC$goals_per_game, Countries_WC$total_wins, method = "spearman")
+cor(Countries_WC$goals_against_per_game, Countries_WC$total_wins, method = "spearman")
+cor(Countries_WC$goals_per_game, Countries_WC$total_losses, method = "spearman")
+cor(Countries_WC$goals_against_per_game, Countries_WC$total_losses, method = "spearman")
+
+cor(Countries_WC$goals_per_game, Countries_WC$win_perc, method = "spearman")
+cor(Countries_WC$goals_against_per_game, Countries_WC$win_perc, method = "spearman")
+cor(Countries_WC$diff, Countries_WC$total_wins, method = "spearman")
+cor(Countries_WC$diff, Countries_WC$total_losses, method = "spearman")
+
+cor(Countries_WC$diff, Countries_WC$win_perc, method = "spearman")
+cor(Countries_WC$diff, Countries_WC$total_draws, method = "spearman")
+```
+
+## Appendix 2
+
+**2.a**
+
+```{r message=FALSE}
+# Hypothesis Tests on German Teams
+# PART 1: Germany Analysis
+# Part A: Germany ANOVA test
+east_germany_scores = subset(Norm_scores_fifa, country == "East Germany")$score
+germany_scores = subset(Norm_scores_fifa, country == "Germany")$score
+west_germany_scores = subset(Norm_scores_fifa, country == "West Germany")$score
+
+germany_anova_data = data.frame(
+  country = c(rep("East Germany", length(east_germany_scores)),
+              rep("Germany", length(germany_scores)),
+              rep("West Germany", length(west_germany_scores))),
+  score = c(east_germany_scores, germany_scores, west_germany_scores))
+
+germany_aov = aov(score ~ country, data = germany_anova_data)
+summary(germany_aov)
+```
+
+**2.b**
+
+```{r message=FALSE}
+# Part B: Germany two sample t-test 
+split_germany_scores = c(east_germany_scores, west_germany_scores)
+t.test(split_germany_scores, germany_scores, var.equal = TRUE)
+```
+
+**2.c**
+
+```{r message=FALSE}
+# PART 2: Yugoslavia's Analysis
+# Part A: Yugoslavia ANOVA test
+yugoslavia_score = subset(Norm_scores_fifa, country %in% c("FR Yugoslavia", "Yugoslavia"))$score
+croatia_score = subset(Norm_scores_fifa, country == "Croatia")$score
+serbia_score = subset(Norm_scores_fifa, country == "Serbia")$score
+slovenia_score = subset(Norm_scores_fifa, country == "Slovenia")$score
+
+yugoslavia_anova_data = data.frame(
+  country = c(rep("Yugoslavia", length(yugoslavia_score)),
+              rep("Croatia", length(croatia_score)),
+              rep("Serbia", length(serbia_score)),
+              rep("Slovenia", length(slovenia_score))),
+  score = c(yugoslavia_score, croatia_score, serbia_score, slovenia_score))
+
+yugoslavia_aov = aov(score ~ country, data = yugoslavia_anova_data)
+summary(yugoslavia_aov)
+```
+
+**2.d**
+
+```{r message=FALSE}
+# Part B: Yugoslavia two sample t-test
+split_yugoslavia_scores = c(croatia_score, serbia_score, slovenia_score)
+t.test(split_yugoslavia_scores, yugoslavia_score, var.equal = TRUE)
+```
+
+## Appendix 3
+
+**3.a**
+
+```{r}
+Matches = read.csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-11-29/wcmatches.csv")
+matches_rename = Matches
+
+for(i in seq(1, length(matches_rename$stage))){
+  if(matches_rename[i,]$stage %in% c("Group 1", "Group 2", "Group 3",
+                                     "Group 4", "Group 5","Group 6", 
+                                     "Group D ", " Group A",
+                                     "Group A", "Group B", "Group C",
+                                     "Group D", "Group E", "Group F",
+                                     "Group G", "Group H", "Group I")){
+    matches_rename[i,]$stage = "Group"
+  }
+  
+  if(matches_rename[i,]$stage %in% c("Round of 16", "Quarterfinals",
+                                     "Semifinals", "Third place",
+                                     "Final", "Final Round")){
+    matches_rename[i,]$stage = "Knockout"
+  }
+}
+```
+
+**3.b**
+
+```{r message=FALSE}
+library(tidyverse)
+
+winners <- matches_rename |>
+  select(year, home_team, away_team, home_score, away_score, outcome, stage) |>
+  mutate(winning_team = ifelse(outcome == "H", home_team, away_team)) |>
+  mutate(winning_score = ifelse(outcome == "H", home_score, away_score))
+
+# splitting the dataset
+split_data <- split(winners, f = winners$stage)
+group <- split_data$Group
+knockout <- split_data$Knockout
+
+country = unique(knockout$winning_team)
+group = subset(group, winning_team %in% country)
+```
+
+**3.c**
+
+```{r message=FALSE}
+# FUNCTION TO FIND OUT THE TOTAL NUMBER OF GOALS SCORED BY EACH TEAM
+score <- function(df){
+  teams_won <- unique(df$winning_team)
+  teams_score <- vector(length = length(teams_won))
+  
+  count = 0
+  for(i in 1:length(teams_won)){
+    for(j in 1:nrow(df)){
+      if(teams_won[i] == df$winning_team[j]){
+        count = count + 1
+      }
+    }
+    teams_score[i] = count
+    count = 0
+  }
+  
+  total_goals <- data.frame(teams_won, teams_score)
+  return(total_goals)
+}
+
+# FUNCTION TO COMPARE IF COUNTRIES PLAY BETTER IN GROUP OR KNOCKOUTS
+comparison <- function(df){
+  total_goals <- score(df)
+  
+  total_goals |>
+    mutate(teams_won = reorder(teams_won, teams_score))
+}
+
+total_group_goals <- comparison(group)
+total_knockout_goals <- comparison(knockout)
+
+# Joining the datasets
+total_fifa_goals <- total_group_goals |>
+  inner_join(total_knockout_goals, by = "teams_won") |>
+  rename("group_goals" = "teams_score.x") |>
+  rename("knockout_goals" = "teams_score.y")
+```
+
+**3.d**
+
+```{r message=FALSE}
+dataset <- tidyr::gather(total_fifa_goals, key = "score_type", value = "score", 
+                    group_goals, knockout_goals)
+
+ggplot(dataset, aes(y = teams_won, x = score, fill = score_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = score), size = 3, position = position_dodge(width = 0.9), vjust = 0.5) +
+  labs(title = "Goals by Country", x = "Goals", y = "Country", fill = "")
+```
+
+**3.e**
+
+```{r message=FALSE}
+# joining the group_score and knockout_score datasets
+group_score <- score(group)
+knockout_score <- score(knockout)
+
+final_score <- group_score |>
+  inner_join(knockout_score, by = "teams_won")
+
+final_score <- final_score |>
+  rename("group_score" = "teams_score.x") |>
+  rename("knockout_score" = "teams_score.y")
+
+# AVERAGE GOALS SCORED BY THESE COUNTRIES 
+final_score <- final_score |>
+  mutate(avg_score = (group_score + knockout_score)/2)
+
+# CORRELATION BETWEEN KNOCKOUT GOALS AND GROUP GOALS
+final_score |>
+  summarise(corr = cor(group_score, knockout_score))
+```
+
+**3.f**
+
+```{r message=FALSE}
+# HOME VS AWAY
+# Group matches: home vs away goals for every country (all years)
+Home_Goals_Group = group %>% group_by(home_team) %>% 
+  group_by(year, .add = TRUE) %>%
+  summarise(home_goals = sum(home_score), H_goals_against = sum(away_score),
+            H_total_matches = n(), year) %>% 
+  rename(country = home_team)
+
+Away_Goals_Group = group %>% group_by(away_team) %>% 
+  group_by(year, .add = TRUE) %>%
+  summarise(away_goals = sum(away_score), A_goals_against = sum(home_score),
+            A_total_matches = n()) %>% 
+  rename(country = away_team)
+
+# joining to create the overall goals in the group
+Group_Goals <- Home_Goals_Group |>
+  inner_join(Away_Goals_Group, by = c("country", "year"))
+
+# Knockout matches: home vs away goals for every country (all years)
+Home_Goals_Knockout = knockout %>% group_by(home_team) %>% 
+  group_by(year, .add = TRUE) %>%
+  summarise(home_goals = sum(home_score), H_goals_against = sum(away_score),
+            H_total_matches = n()) %>% 
+  rename(country = home_team)
+
+Away_Goals_Knockout = knockout %>% group_by(away_team) %>% 
+  group_by(year, .add = TRUE) %>%
+  summarise(away_goals = sum(away_score), A_goals_against = sum(home_score),
+            A_total_matches = n()) %>% 
+  rename(country = away_team)
+
+# joining to create the overall goals in the knockout
+Knockout_Goals = Home_Goals_Knockout |>
+  inner_join(Away_Goals_Knockout, by = c("country", "year"))
+```
+
+**3.g**
+
+```{r message=FALSE}
+# Calculating additional stats:
+Group_Goals = Group_Goals |> 
+  mutate(total_goals = home_goals + away_goals,
+         total_goals_against = H_goals_against + A_goals_against,
+         diff = total_goals - total_goals_against,
+         total_matches = H_total_matches + A_total_matches,
+         goals_per_game = total_goals/total_matches,
+         goals_against_per_game = total_goals_against/total_matches)
+
+Knockout_Goals = Knockout_Goals |> 
+  mutate(total_goals = home_goals + away_goals,
+         total_goals_against = H_goals_against + A_goals_against,
+         diff = total_goals - total_goals_against,
+         total_matches = H_total_matches + A_total_matches,
+         goals_per_game = total_goals/total_matches,
+         goals_against_per_game = total_goals_against/total_matches)
+```
+
+**3.h**
+
+```{r, message=FALSE}
+# Normalization of Goals per World Cup:
+norm_goals_group = Group_Goals %>% 
+  group_by(year) %>% summarize(mean_gpg = mean(goals_per_game),
+                               sd_gpg = sd(goals_per_game),
+                               mean_gapg = mean(goals_against_per_game),
+                               sd_gapg = sd(goals_against_per_game))
+
+Group_Goals = Group_Goals %>% 
+  left_join(norm_goals_group, by = "year")
+
+norm_goals_knock = Knockout_Goals %>% 
+  group_by(year) %>% summarize(mean_gpg = mean(goals_per_game),
+                               sd_gpg = sd(goals_per_game),
+                               mean_gapg = mean(goals_against_per_game),
+                               sd_gapg = sd(goals_against_per_game))
+
+
+Knockout_Goals = Knockout_Goals %>% 
+  left_join(norm_goals_knock, by = "year")
+
+Knockout_Goals <- na.omit(Knockout_Goals)
+```
+
+**3.i**
+
+```{r, message=FALSE}
+# SCORING SYSTEM
+# group
+Norm_scores_group = Group_Goals %>% 
+  dplyr::select(c(country, year, goals_per_game, goals_against_per_game,
+                  mean_gpg, sd_gpg, mean_gapg, sd_gapg)) %>% 
+  mutate(norm_goals_per_game = (goals_per_game - mean_gpg)/sd_gpg,
+         norm_goals_against_per_game = 
+           (goals_against_per_game - mean_gapg)/sd_gapg,
+         score = norm_goals_per_game - norm_goals_against_per_game) %>% 
+  dplyr::select(c(country, year, score)) %>% arrange(desc(score))
+
+Norm_scores_group <- Norm_scores_group |>
+  group_by(country) |>
+  summarise(score = mean(score))
+
+# knockout
+Norm_scores_knock = Knockout_Goals %>% 
+  dplyr::select(c(country, year, goals_per_game, goals_against_per_game,
+                  mean_gpg, sd_gpg, mean_gapg, sd_gapg)) %>% 
+  mutate(norm_goals_per_game = (goals_per_game - mean_gpg)/sd_gpg,
+         norm_goals_against_per_game = 
+           (goals_against_per_game - mean_gapg)/sd_gapg,
+         score = norm_goals_per_game - norm_goals_against_per_game) %>% 
+  dplyr::select(c(country, year, score)) %>% arrange(desc(score))
+
+Norm_scores_knock <- Norm_scores_knock |>
+  group_by(country) |>
+  summarise(score = mean(score))
+
+Norm_scores_knock <- na.omit(Norm_scores_knock)
+
+# Filtering out the countries from group which qualify in the knockouts
+teams = unique(Norm_scores_knock$country)
+Norm_scores_group = subset(Norm_scores_group, country %in% teams)
+
+
+# Joining the two normalized dataset 
+Norm_fifa_scores <- Norm_scores_group |>
+  full_join(Norm_scores_knock, by = "country") |>
+  rename("group_score" = "score.x") |>
+  rename("knockout_score" = "score.y")
+
+head(Norm_fifa_scores)
+```
+
+**3.j**
+
+```{r message=FALSE}
+# BARPLOT
+df <- tidyr::gather(Norm_fifa_scores, key = "score_type", value = "score", 
+                    group_score, knockout_score)
+
+ggplot(df, aes(y = country, x = score, fill = score_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = sprintf("%.3f", score)), size = 3, position = position_dodge(width = 0.9), vjust = 0.5) +
+  labs(title = "Scores by Country", x = "Score", y = "Country", fill = "")
+
+```
+
+**3.k**
+
+```{r message=FALSE}
+# Finding correlation between group score and knockout score
+cor(Norm_fifa_scores$group_score, Norm_fifa_scores$knockout_score)
+```
+
+**3.l**
+```{r message=FALSE}
+# Matched pair test between the scores of group and knockout games
+test <- t.test(Norm_fifa_scores$group_score, Norm_fifa_scores$knockout_score, 
+               paired = TRUE)
+test
+```
+## Appendix 4
+
+**4.a**
+
+```{r message=FALSE}
+#Grouping the data with countries to find the minimum and maximum score
+Norm_meanscores_fifa<-Norm_scores_fifa %>% 
+  group_by(country) %>% 
+  summarise(avgscore=mean(score)) %>% 
+  arrange(avgscore,by_group=c(country))
+
+Norm_meanscores_fifa
+
+max_min<-Norm_scores_fifa %>% group_by(country) %>% 
+  summarize(max = max(score), min = min(score)) %>%
+  mutate(difference = max - min) %>% 
+  arrange(desc(difference))
+
+head(max_min, 10)
+
+#Finding the difference between the max and their corresponding mean
+# and ordering them according to their largets difference
+
+ordered_max<-max_min %>% 
+  arrange(desc(max))
+
+Difference<-ordered_max %>% mutate(Difference=max-min) %>% 
+            arrange(desc(Difference))
+```
+
+**4.b**
+
+```{r message=FALSE}
+library(ggplot2)
+
+Country<-Difference$country
+difference_minmax<-Difference$Difference
+
+dataset<-data.frame( Country, difference_minmax) %>% arrange(desc(difference_minmax))
+
+ggplot(dataset,aes(y=Country,x=difference_minmax))+
+  geom_bar(stat="Identity", aes(fill=difference_minmax))
+```
+
+**4.c**
+
+```{r message=FALSE}
+#This part displays the dataset according to the top maximum to the least maximum
+ordered_max<-max_min %>% 
+  arrange(desc(max))
+
+#printing top 10 coubtries with the best score
+max_y<-head(ordered_max,10)
+
+Country_max<-max_y$country
+score_max<-max_y$max
+score<-max_y$min  
+
+dataset12<-data.frame(Country_max,score_max)
+
+#displaying
+ggplot(dataset12,aes(y=Country_max,x=score_max))+geom_bar(stat="Identity")+
+  aes(fill=score_max)
+#in this dsiplay germany has the maximum score
+```
+
+**4.d**
+
+```{r message=FALSE}
+#This part displays the dataset according to the top minimum to the least minimum
+#lowest score to the highest score
+ordered_min<-max_min %>% 
+  arrange(min)
+
+min_y<-head(ordered_min)
+
+Country_min<-min_y$country
+score_min<-min_y$min
+
+dataset13<-data.frame(Country_min,score_min)
+dataset13
+
+#displaying the top minimum scores in countries
+ggplot(dataset13,aes(y=Country_min,x=score_min))+geom_bar(stat="Identity")+
+  aes(fill=score_min)
+```
